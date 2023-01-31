@@ -1,0 +1,964 @@
+---
+title: "FFT costs"
+author: "Hansjörg Neth"
+date: "`r Sys.Date()`"
+bibliography: [../vignettes/fft.bib]
+csl: ../vignettes/apa.csl
+link-citations: yes
+# output: pdf_document
+output:
+  rmdformats::html_clean:
+    code_folding: show # hide/show
+    self_contained: TRUE # TRUE can cause errors with rmdformats
+    toc_float: true
+    toc_depth: 3
+    highlight: default # textmate default kate haddock monochrome #
+    lightbox: true # True by default
+    fig_width: 7 # in inches
+---
+
+```{r setup, echo = FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      fig.width = 7.5, 
+                      fig.height = 7.5, 
+                      dpi = 100, 
+                      out.width = "600px", 
+                      fig.align='center', 
+                      message = FALSE)
+
+# Constants:
+file_name <- "costs_FFTrees.Rmd"
+```
+
+```{r load-pkg, echo = FALSE, message = FALSE, results = 'hide'}
+# Packages: 
+library(FFTrees)
+packageVersion("FFTrees")
+
+library(magrittr)  # for pipe operator %>%
+```
+
+
+Exploring cost issues in the context of FFTs and **FFTrees**. 
+
+
+# Beyond accuracy: Considering decision costs in context of FFTs 
+
+Considering costs in the context of FFTs
+
+## Introduction
+
+Two distinct criteria for "good" decisions: Accuracy and cost. 
+What is their relation to each other? 
+Are there systematic trade-offs?
+
+Philosophically, costs are an alternative candidate criterion to measure decision success to accuracy: 
+Maximize utility, rather than consistency/rationality.
+(See literature on criteria for adaptive success/survival/fitness, rather than for consistency/rationality.)
+
+
+## Types of costs (in content terms)
+
+When making decision in applied contexts, we can distinguish between different types of costs: 
+
+- _diagnostic_ costs: cost of obtaining information.  
+Example: age vs. address vs. political orientation
+
+- _treatment_ costs: cost of an intervention.  
+Example: sex vs. fertility treatment; exercise vs. operation; diet or medication.   
+
+Possible _units_ of cost: 
+money, time, ease of accessibility (e.g., based on ethical or legal norms)
+
+
+## Types of costs (in model terms)
+
+<!-- 2 types of costs: outcome vs. cues (as accuracy / frugality measures) -->
+
+Distinguish between 2 types of costs:
+
+1. _outcome costs_ are based on decision outcomes: What are the consequences of decisions? 
+2. _cue costs_ are based on cue usage: How expensive are decisions?
+
+Note that costs can generally be viewed as 
+
+1. a measure of _accuracy_ (especially outcome costs)
+2. a measure of _frugality_ (especially cue costs)
+
+This ambiguity/flexibility of costs is helpful, 
+as maximizing a combined measure of costs can _integrate_ both aspects. 
+
+
+<!-- Costs are a function of model + data: -->
+
+How do costs occur?
+
+Importantly, both types of cost are _not_ a property of data or decision trees by themselves, 
+but rather a function of _applying trees to data_. 
+Thus, costs need to be examined in a context of both concrete data and a specific decision model.
+
+**Example**: FFT with 1 cheap and 1 expensive cue, 2 orders:
+Difference in cost depends on interaction between cues and data: 
+How many cases are classified on each cue?
+
+Create a non-trivial example (with illustrative content): 
+
+- 67:33 classification: FFT with cheap cue first has _much lower_ cost than FFT with expensive cue first.
+- 50:50 classification: FFT with cheap cue first has _lower_ cost than FFT with expensive cue first.
+- 33:67 classification: FFT with cheap cue first has _higher_ cost than FFT with expensive cue first.
+
+
+<!-- Alternative algorithms/competition: -->
+
+Hypothesis regarding model comparisons: 
+Costs of using FFT are usually lower than for alternative algorithms. 
+However, reasons for considering costs in FFTs are also that FFTs make costs much more transparent and manipulable.
+
+
+### Roles of cost (in FFTs)
+
+Distinguish between different _roles_ of costs (in FFTs): 
+
+- as a mere outcome measure (DV), like accuracy or frugality measures.
+
+- as a goal or criterion for optimization/selection: 
+    - for good cue thresholds (`goal.threshold`)
+    - for creating trees (`goal.chase`)
+    - for selecting trees (`goal`)
+
+
+<!-- +++ here now +++  -->
+
+### On optimizing costs 
+
+1. An important insight when addressing costs is that `accuracy` can be understood as "outcome costs": 
+It is computed as a function of the frequency of four classification outcomes.  
+The `cost.outcomes` argument allows assigning a value to each classification outcome. 
+Using values of `cost.outcomes = list(hi = 0, mi = 1, fa = 1, cr = 0)` implies that both errors have costs and are equally important. Thus, the `cost` resulting from weighting outcomes by these `cost.outcomes` is a perfect negative correlation to accuracy\ `acc`. 
+
+
+2. A second and different notion of cost: _Cue cost_. 
+
+Conceptually, costs of using cues are a measure of _frugality_ in a narrower sense than outcome costs, which are a measure of _accuracy_.
+
+Importantly, both types of cost are a property of a tree and its decisions for some data (rather than of a tree alone). 
+
+Note: It makes no sense to optimize `goal.threshold` for cue costs (if `cost.outcomes` are all\ 0), as every cue has a fixed cue cost (that does not change by using different thresholds). 
+
+In practice, using `"cost"` as `goal.threshold` will only incorporate outcome costs (based on `cost.outcomes`).
+However, it makes perfect sense to optimize tree construction (`goal.chase`) and select trees (`goal`) based on their cue costs or overall costs. 
+
+
+# Code
+
+## Cost types
+
+- Is using `cost.outcomes` identical to using accuracy?
+
+    - Do we get the _same FFTs_ when using balanced `cost.outcomes` parameters and optimizing for `cost`? 
+    - What are the _correlations_ between accuracy and cost measures?
+
+If so, then the aggregate `cost` parameter already allows integrating _accuracy_ and _cue costs_!
+
+Test\ 1: Using `heart.train` and `heart.test` data: 
+
+```{r cost-dec-1, eval = FALSE}
+# A: Setup: HD tree by "acc": ---- 
+
+hd_0 <- FFTrees(formula = diagnosis ~ .,           # criterion and (all) predictors
+                data = heart.train,                # training data
+                data.test = heart.test,            # testing data
+                cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0), # default values
+                # cost.outcomes = list(hi = 0, fa = 0, mi = 0, cr = 0),    # NEW ZERO values
+                main = "HD (acc)",                 # some label
+                goal = "acc",
+                goal.chase = "acc",
+                goal.threshold = "acc",
+                sens.w = 0.6,
+                max.levels = NULL,
+                decision.labels = c("low risk", "high risk"), # labels for decisions
+                quiet = FALSE                     # enable/suppress user feedback
+)
+
+x0 <- hd_0  # copy
+
+# Inspect results:
+summary(x0)
+plot(x0, what = "cues")
+x0$cues$stats$train
+x0$trees$definitions
+x0$trees$stats$train
+x0$trees$stats$test
+cor(x0$trees$stats$test$acc, x0$trees$stats$test$cost)
+
+
+# B: Setting ALL goals to "cost": ----
+
+hd_1 <- FFTrees(formula = diagnosis ~ .,           # criterion and (all) predictors
+                data = heart.train,                # training data
+                data.test = heart.test,            # testing data
+                cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0), # default values
+                # cost.outcomes = list(hi = 0, fa = 0, mi = 0, cr = 0),    # NEW ZERO values
+                main = "HD (cost)",                # some label
+                goal = "cost", 
+                goal.chase = "cost",
+                goal.threshold = "cost",
+                decision.labels = c("low risk", "high risk"), # labels for decisions
+                quiet = FALSE                      # enable/suppress user feedback
+)
+
+
+x1 <- hd_1  # copy
+
+# Inspect results:
+plot(x1, what = "cues")
+x1$cues$stats$train
+x1$trees$definitions
+x1$trees$stats$test
+cor(x1$trees$stats$test$acc, x1$trees$stats$test$cost)
+
+# Note equality of cues and trees:
+all.equal(x0$cues$stats$train,  x1$cues$stats$train) 
+all.equal(x0$trees$definitions, x1$trees$definitions)
+all.equal(x0$trees$stats$test,  x1$trees$stats$test)
+```
+
+Test\ 2: Using `titanic` data: 
+
+```{r cost-dec-2, eval = FALSE}
+# A: Setup: Titanic tree by "acc"  ---- 
+
+set.seed(123)
+
+t_0 <- FFTrees(formula = survived  ~ .,          # criterion and (all) predictors
+               data = titanic,                   # training data
+               train.p = 0.50,                   # 50:50
+               cost.outcomes = list(hi = 0, mi = 1, fa = 1, cr = 0), # default values
+               # cost.outcomes = list(hi = 0, mi = 0, fa = 0, cr = 0),    # NEW ZERO values
+               main = "T (acc)",                 # some label
+               goal = "acc", 
+               goal.chase = "acc",
+               goal.threshold = "acc",
+               decision.labels = c("low risk", "high risk"), # labels for decisions
+               quiet = FALSE                      # enable/suppress user feedback
+)
+
+x0 <- t_0  # copy
+
+# Inspect results:
+plot(x0, what = "cues")
+x0$cues$stats$train
+x0$trees$definitions
+x0$trees$stats$test
+cor(x0$trees$stats$test$acc, x0$trees$stats$test$cost)
+
+# B: Setting ALL goals to "cost": ----
+
+set.seed(123)
+
+t_1 <- FFTrees(formula = survived ~ .,           # criterion and (all) predictors
+               data = titanic,                   # training data
+               train.p = 0.50,                   # 50:50
+               cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0), # default values
+               # cost.outcomes = list(hi = 0, fa = 0, mi = 0, cr = 0),    # NEW ZERO values
+               main = "T (cost)",                # some label
+               goal = "cost", 
+               goal.chase = "cost",
+               goal.threshold = "cost",
+               decision.labels = c("low risk", "high risk"), # labels for decisions
+               quiet = FALSE                      # enable/suppress user feedback
+)
+
+x1 <- t_1  # copy
+
+# Inspect results:
+plot(x1, what = "cues")
+x1$cues$stats$train
+x1$trees$definitions
+x1$trees$stats$test
+cor(x1$trees$stats$test$acc, x1$trees$stats$test$cost)
+
+# Note equality of cues and trees:
+all.equal(x0$cues$stats$train,  x1$cues$stats$train) 
+all.equal(x0$trees$definitions, x1$trees$definitions)
+all.equal(x0$trees$stats$test,  x1$trees$stats$test)
+```
+
+**Answer**: 
+Optimizing for accuracy (without balancing or weighting sens and spec) is the same 
+as optimizing for "cost" (all 3 goals) with default `cost.outcomes` values (hi = cr = 0, fa = mi = 1). 
+Thus, the notions of "accuracy" and "outcome costs" are identical (provided the four outcome types are weighted the same in both measures). 
+
+- **Caveat**: Is `goal.threshold = "cost"` actually being used in cue evaluations?
+
+
+### Goal types
+
+Note some hypotheses:
+
+- `goal.threshold = "cost"` should affect the cue evaluations:   
+If `cost.outcomes` are varied, this should be used in `fftrees_cuerank()` to alter the thresholds in `x$cues$stats$train`. 
+
+- cue thresholds should vary with `cost.outcomes` (analogous to using `sens.w` and `wacc`), 
+but _not_ vary with `cost.cues` (as every cue has a constant cost here). 
+
+Test hypotheses: 
+
+```{r cost-dec-3, eval = FALSE}
+# A: Setup: HD tree by "acc": ---- 
+
+h0 <- FFTrees(formula = diagnosis ~ .,           # criterion and (all) predictors
+              data = heart.train,                # training data
+              data.test = heart.test,            # testing data
+              cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0),      # default values
+              # cost.outcomes = list(hi = 0, fa = 0, mi = 0, cr = 0),    # NEW ZERO values
+              main = "HD (acc)",                 # some label
+              goal = "acc",
+              goal.chase = "acc",
+              goal.threshold = "acc",
+              decision.labels = c("low risk", "high risk"), # labels for decisions
+              quiet = FALSE                      # enable/suppress user feedback
+)
+
+# summary(h0)
+h0$cues$thresholds$train$sex
+h0$cues$stats
+
+
+# B: Set goal.threshold to "cost" (with default `cost.outcomes`): ---- 
+
+h1 <- FFTrees(formula = diagnosis ~ .,           # criterion and (all) predictors
+              data = heart.train,                # training data
+              data.test = heart.test,            # testing data
+              cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0),      # default values !
+              # cost.outcomes = list(hi = 0, fa = 0, mi = 0, cr = 0),    # NEW ZERO values
+              main = "HD (cost 1)",              # some label
+              goal = "acc", 
+              goal.chase = "acc",
+              goal.threshold = "cost",  # !
+              decision.labels = c("low risk", "high risk"), # labels for decisions
+              quiet = FALSE                      # enable/suppress user feedback
+)
+
+# summary(h1)
+h1$cues$thresholds$train$sex
+h1$cues$stats
+h1$cues$thresholds$train$cp
+
+# Note: Cue thresholds did NOT change (qed):
+all.equal(h0$cues$thresholds$train$sex, h1$cues$thresholds$train$sex)
+all.equal(h0$cues$stats, h1$cues$stats)
+
+
+# C: Set goal.threshold to "cost" (with DIFFERENT `cost.outcomes`): ---- 
+
+h2 <- FFTrees(formula = diagnosis ~ .,           # criterion and (all) predictors
+              data = heart.train,                # training data
+              data.test = heart.test,            # testing data
+              # cost.outcomes = list(hi = 0, mi = 1, fa = 1, cr = 0),    # default values !
+              cost.outcomes = list(hi = 0, mi = 2.5, fa = 0.5, cr = 0),    # DIFFERENT values !!
+              main = "HD (cost 2)",              # some label
+              goal = "acc", 
+              goal.chase = "acc",
+              goal.threshold = "cost", # ! Note feedback message: Using cost.outcomes, as cost.cues are constant per cue.
+              decision.labels = c("low risk", "high risk"), # labels for decisions
+              quiet = FALSE                      # enable/suppress user feedback
+)
+
+h2$cues$thresholds$train$sex 
+h2$cues$stats  # thresholds were changed, MEAN cost is lower (but some are higher than in h1$cues$stats)
+
+# Note: Changing cost.outcomes and optimizing goal.threshold = "cost" DID change the cue thresholds:
+# - cost are different
+# - order is different (as cost is used to sort rows)
+
+all.equal(h1$cues$thresholds$train$sex, h2$cues$thresholds$train$sex) # => FALSE, qed.
+all.equal(h1$cues$stats, h2$cues$stats) # => FALSE, qed.
+
+```
+
+
+- Allow setting all `cost.outcomes` to\ $0$ (to exclusively consider cue costs).
+
+```{r cost-dec-4, eval = FALSE}
+# Setup: Create FFTs by algorithm: ---- 
+
+hd_0 <- FFTrees(formula = diagnosis ~ .,           # criterion and (all) predictors
+                data = heart.train,                # training data
+                data.test = heart.test,            # testing data
+                # cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0),  # default values
+                cost.outcomes = list(hi = 0, fa = 0, mi = 0, cr = 0),    # NEW ZERO values
+                main = "Heart disease (0)",        # some label
+                decision.labels = c("low risk", "high risk"), # labels for decisions
+                quiet = FALSE                      # enable/suppress user feedback
+)
+
+x <- hd_0  # copy
+
+# Inspect results (costs):
+x$trees$stats$train
+
+
+# Setting goals to "cost": ----
+
+hd_1 <- FFTrees(formula = diagnosis ~ .,           # criterion and (all) predictors
+                data = heart.train,                # training data
+                data.test = heart.test,            # testing data
+                # cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0),  # default values
+                cost.outcomes = list(hi = 0, fa = 0, mi = 0, cr = 0),    # NEW ZERO values
+                goal = "cost",            # works
+                goal.chase = "cost",      # works
+                # goal.threshold = "cost",  # FAILS, as prediction_v and criterion_v have no variance!
+                main = "Heart disease (1)",        # some label
+                decision.labels = c("low risk", "high risk"), # labels for decisions
+                quiet = FALSE                      # enable/suppress user feedback
+)
+
+x <- hd_1  # copy
+
+# Inspect results (costs):
+x$trees$stats$train
+```
+
+**Status**: 
+Setting all `cost.outcomes` to\ $0$ works, as long as not all goal parameters are set to `"cost"` as well.
+
+However, when all `cost.outcomes` are set to\ $0$, `goal.threshold` must _not_ be `"cost"`, as cue thresholds can only be optimized for outcome costs, not cue costs (which are constant per cue).
+
+### Adding cue costs
+
+```{r cost-dec-5-scaling}
+# Create a list with a cost value for each predictor variable:
+set.seed(101)
+cue_names <- names(heartdisease)[2:14]
+cue_costv <- sample(1:3, size = length(cue_names), replace = TRUE)
+
+my_cue_cost <- as.list(cue_costv)
+names(my_cue_cost) <- cue_names
+
+# Inspect cue costs:
+# my_cue_cost  # list
+vc_cue_cost <- unlist(my_cue_cost) # as vector
+vc_cue_cost
+table(vc_cue_cost)  # distribution of values?
+
+# FFT with cue costs: ----
+hd_cc1 <- FFTrees(formula = diagnosis ~ .,           # criterion and (all) predictors
+                  data = heart.train,                # training data
+                  data.test = heart.test,            # testing data
+                  cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0),  # default values
+                  # cost.outcomes = list(hi = 0, fa = 0, mi = 0, cr = 0),  # use ZERO values
+                  cost.cues = my_cue_cost, 
+                  goal = "bacc",            # works
+                  goal.chase = "cost",      # set to either "bacc" OR "cast" !!!
+                  goal.threshold = "bacc",  # works
+                  main = "Heart disease (1)",        # some label
+                  decision.labels = c("low risk", "high risk"), # labels for decisions
+                  quiet = FALSE                      # enable/suppress user feedback
+)
+
+summary(hd_cc1)
+
+```
+
+
+### Combining costs
+
+3. Define a combination: 
+A weighted balance of outcome costs (accuracy) and cue costs (frugality).
+
+Scaling issues: 
+Consider scaling both components to a range from 0 (best) to 1 (worst) and then use weighted combination of both components.
+
+```{r cost-dec-6-scaling, eval = FALSE}
+# 1. Scaling/centering values: ----  
+
+dec_cost <- c(0, 1, 1, 0)
+(dc_c <- scale(dec_cost, center = T, scale = F))
+dc_c/max(abs(dc_c))
+
+cue_cost <- 1:10
+cc_c <- scale(cue_cost, center = T, scale = F)
+cc_c/max(abs(cc_c))
+
+
+# 2. Normalizing range: Min-max scaling ---- 
+
+d <- sample(-100:100, 50)
+
+# normalized:
+d_normalized = (d - min(d)) / (max(d) - min(d))
+
+# # See preProcess() of caret pkg:
+# d_2 <- caret::preProcess(as.data.frame(d), method = c("range"))
+# d_2
+
+
+# Histograms of data and normalized data:
+opar <- par(no.readonly = TRUE)
+par(mfrow = c(1, 2))
+hist(d,            breaks = 20, xlab = "d",            col = "gold",   main = "raw data")
+hist(d_normalized, breaks = 20, xlab = "Normalized d", col = "orange", main = "normalized")
+par(opar)
+
+
+# 3. z-transformation: ----
+
+
+
+```
+
+
+Advantage of a combined measure: Simultaneously optimizing for both accuracy and cost:
+
+    - Compute balanced sum of "weighted outcome cost/accuracy and cue cost" (with `w.cost.outcomes` parameter from\ 0 to\ 1, default = 1 = "accuracy").
+    
+    - Allow using this balanced accuracy-cost as goal parameter `"cost"`.
+
+
+### Visualizing trade-offs between accuracy and cost 
+
+For a given set of FFTs (not necessarily from the same run/family): 
+
+- Visualize training/prediction _accuracy_ (on y-axis) by _cost_ (on x-axis) in analogy to ROC curve.
+- Show the marginal curve for efficient/non-dominated FFTs. 
+
+
+Distinguish between 2 types of (ROC-like) efficiency curves:
+
+1. _Accuracy_ ($y$ in range `[0, 1]`) by total _cost_ ($x$ in range `[0, Inf]`)
+
+2. _Outcome_ costs ($y$ in range `[0, 1]`) by _cue cost_ ($x$ in range `[0, Inf]`)
+
+<!-- Advantage:  -->
+
+As long as the direction is correct ($0$: ideal, $-$:\ better vs. $+$:\ worse), the costs on the $x$-axis can be in any unit or scale. 
+
+**ToDo**: 
+
+- Identify efficient/non-dominated points from a larger set of candidate points; then 
+
+- Use them to draw a ROC-like efficiency curve.
+
+
+<!-- +++ here now +++  -->
+
+
+# A grammar of FFTs
+
+Note that `my.tree` and `fftrees_wordstofftrees()` provide a natural-language parser for defining FFTs. 
+Goal: Provide simple tools for manipulating existing FFTs: 
+
+- A grammar for editing FFTs
+
+- A set of simple tree-trimming tools
+
+- A **tidyverse**-friendly FFT manipulation language --- **dplyr** for FFTs ("fftplyr") 
+
+**Workflow**: 
+Start either from `FFTrees` objects or from verbal tree descriptions: 
+Extract an existing FFT and then change its tree definition (in pipes). 
+Use the changed definition(s) to create and evaluate new `FFTrees` objects. 
+
+## A. Tree conversion functions
+
+Translate between 2 FFT representations (both data frames):
+
+1. `read_fft_df()` or "read 1 FFT" from tree definitions (was `ffts_to_fft()`): 
+Interpret a line of `tree.definitions` (i.e., multiple FFTs as df) 
+into a single-tree data frame (vectors of elements for each cue).  
+(See `fftrees_apply()` and `fftrees_ffttowords()` for similar functionality.)
+
+2. `write_fft_df()` or "write 1 FFT" (was: `fft_to_fft_in_1_line()`): 
+Turn an FFT from single-tree df 
+into a line of `tree.definitions` (as df).
+(See end of `fftrees_grow_fan()` and `fftrees_wordstofftrees()` for similar functionality.)
+
+3. `add_fft_df()` adds an FFT/its definition to a set of (existing) tree definitions. 
+
+
+### Corresponding code
+
+Create some default `FFTrees` object\ `x`:
+
+```{r gfft-1-default, eval = TRUE}
+# Setup: Create FFTs by algorithm: ---- 
+
+hd_1 <- FFTrees(formula = diagnosis ~ .,           # criterion and (all) predictors
+                data = heart.train,                # training data
+                data.test = heart.test,            # testing data
+                main = "Heart disease (auto)",     # some label
+                decision.labels = c("low risk", "high risk"), # labels for decisions
+                quiet = FALSE  # enable/suppress user feedback
+)
+
+x <- hd_1  # copy FFTrees object (with 7 FFTs)
+```
+
+Using new helper/utility functions (included in, but not yet exported by **FFTrees**):
+
+```{r gfft-2-setup, eval = TRUE}  
+# Setup: 
+ffts_df_0 <- x$trees$definitions   # manually (using object structure)
+ffts_df <- get_fft_definitions(x)  # using the helper function
+ffts_df
+
+# Check:
+dim(ffts_df)  # 7 x 7
+all.equal(ffts_df, ffts_df_0)
+devtools::load_all()
+```
+
+Tree conversion functions:
+
+Note the difference between 
+
+- `fft`: 1 FFT (as df, with 1 row per cue)
+
+- `ffts_df`: A (set of) tree definition(s), but also as df
+
+
+```{r gfft-3-fft-conversion, eval = TRUE}
+# Setup:
+ffts_df <- get_fft_definitions(x)  # using the helper function
+ffts_df
+
+# Demo: 
+
+# 1. read FFT definition: ----
+
+fft <- read_fft_df(ffts_df = ffts_df, tree = 1)
+fft  # 1 FFT (in multi-line format, as df)
+
+
+# 2. write FFT definition: ----
+
+fft_df <- write_fft_df(fft = fft, tree = 123)
+fft_df  # an FFT description (as 1-line)
+
+
+# 3. add FFT definition: ----
+
+dfs_1 <- add_fft_df(fft)    # writes FFT definition and adds it to NULL
+dfs_1
+
+dfs_2 <- add_fft_df(fft_df) # adds FFT definition to NULL
+dfs_2
+
+# Intended uses:
+add_fft_df(fft = ffts_df[2, ], ffts_df = dfs_2)  # 1. Adding FFT definition to a set of definitions
+add_fft_df(fft = read_fft_df(ffts_df, 2), ffts_df = dfs_2)  # 2. Adding FFT (as df) to a set of definitions
+```
+
+
+## B. Tree editing functions 
+
+**Goal**: Simple tools for editing and manipulating parts of existing FFTs 
+
+Useful functions:
+
+1. Add an FFT definition to an existing set of FFT definitions 
+2. Change node orders/cue order 
+3. Flip the exit direction (exit on 0/FALSE/noise vs. 1/TRUE/signal) for cue(s)
+4. Change/mutate cues (by re-defining its cue, threshold, and exit direction)
+5. Delete/drop/remove nodes
+6. Add new nodes (assumes ability to change/mutate cues in 4. above)
+
+- ad 1: See `add_fft_df()` above.
+
+- ad 2: Reorder FFT cues/nodes into different orders: Sort/swap cues, change cue order, etc.  
+
+```{r gfft-fun-2, eval = TRUE}
+# Setup: 
+
+ffts_df <- get_fft_definitions(x)  # x$trees$definitions / definitions (as df)
+fft  <- read_fft_df(ffts_df, tree = 5)  # 1 FFT (as df)
+fft
+
+# Inspect FFT #5:
+plot(x, tree = 5)
+x$trees$definitions[5, ]  # Note: Reversed directions for exits = 0 (noise/FALSE).
+x$trees$inwords[5]
+
+# Demo: 
+
+# Change node order:
+reorder_nodes(fft)  # unchanged
+reorder_nodes(fft, order = c(1, 2, 3))  # unchanged
+reorder_nodes(fft, order = c(2, 1, 3))  # exit cue unchanged
+reorder_nodes(fft, order = c(1, 3, 2))  # exit cue changed
+
+
+# Note:
+# reorder_nodes(fft, order = c(3, 2))     # ERROR: wrong length of order
+```
+
+- ad 3. Flip the exit direction/type (exit on 0/`FALSE`/noise vs. 1/`TRUE`/signal) for cue(s):
+  Only flip directions of non-final nodes, as flipping the final node makes no sense? 
+
+```{r gfft-fun-3-flip, eval = TRUE}
+# Setup: 
+ffts_df <- get_fft_definitions(x)  # x$trees$definitions / definitions (as df)
+fft <- read_fft_df(ffts_df, tree = 2)  # 1 FFT (as df, from above)
+fft
+
+# Demo: 
+flip_exits(fft, nodes = c(1))
+flip_exits(fft, nodes = c(3))
+flip_exits(fft, nodes = c(3, 1))
+flip_exits(fft, nodes = 1:3) 
+
+# Note: Final exits cannot be flipped:
+flip_exits(fft, nodes = 4)
+flip_exits(fft, nodes = 1:4)
+```
+
+
+## C. Macro functions 
+
+Combinations of individual tree editing functions (with loops over sets of variations).
+
+**Objective**: Get multiple variants of an FFT:
+
+- Get all possible exit structures: $n$ cues correspond to $2^{n-1}$ exit structures. 
+
+- Get all possible cue orders: $n$ cues correspond to $n!$ cue orders.
+
+
+<!-- Preliminaries: -->
+
+Require 2 utility functions on combinatorics (implemented in `util_abc.R`): 
+
+1. `all_permutations()` yields all possible permutations of a vector\ `x`
+```{r}
+all_permutations(1:3) #for reordering cues (n cues haben n! Anordnungen)
+all_combinations(1:3, length = 2) #for exit structure (2 ^n-1 Möglichkeiten)
+```
+
+2. `all_combinations()` yields all possible combinations of a set\ `x` of a specific\ `length`
+
+<!-- Code: -->
+
+**Goal**: Defining two key functions for studying FFT variants:
+
+1. `all_node_orders()` of a given FFT:  
+An FFT with $n$\ cues has $n!$ possible cue orders.
+
+```{r gfft-fun-5-all-cue-orders, eval = TRUE}
+# Setup: 
+ffts_df <- get_fft_definitions(x)  # x$trees$definitions / definitions (as df)
+fft  <- read_fft_df(ffts_df, tree = 1)  # 1 FFT (as df, from above)
+fft
+
+# Demo: 
+
+# Tree 1 (3 cues): ----
+dfs_1 <- all_node_orders(fft = read_fft_df(ffts_df, tree = 1))
+dfs_1
+
+dim(dfs_1)  # 3! = 6 orders
+
+# Tree 2 (4 cues): ----
+dfs_2 <- all_node_orders(fft = read_fft_df(ffts_df, tree = 2))
+dfs_2
+
+dim(dfs_2)  # 4! = 24 orders
+```
+
+
+2. `all_exit_structures()` of a given FFT:  
+An FFT with $n$\ cues has $2^{(n-1)}$ possible exit structures.
+
+```{r gfft-fun-6-all-exit-structures, eval = TRUE}
+# Setup: 
+ffts_df <- get_fft_definitions(x)  # x$trees$definitions / definitions (as df)
+fft     <- read_fft_df(ffts_df, tree = 1)  # 1 FFT (as df, from above)
+fft
+
+# Demo:
+dfs_3 <- all_exit_structures(fft = fft)
+dfs_3
+
+dim(dfs_3)  # 3 cues: 2^(3-1) = 4 exit structures.
+
+dfs_4 <- all_exit_structures(fft = read_fft_df(ffts_df, tree = 2))
+dfs_4
+
+dim(dfs_4)  # 4 cues: 2^(4-1) = 8 exit structures.
+```
+
+<!-- +++ here now +++  -->
+
+## Examples 
+
+### Using tree editing functions
+
+Using the auto-generated sets of FFT definitions as `tree.definitions`:
+
+- Varying cue order:
+
+```{r gfft-use-dfs-cue-orders, eval = FALSE}
+
+# Evaluating ALL cue orders of dfs_1: ------  
+
+co_1 <- FFTrees(# formula = diagnosis ~ .,           # formula
+                # data = heart.train,                # training data
+                # data.test = heart.test,            # testing data
+                object = hd_1, 
+                tree.definitions = dfs_1, 
+                main = "FFT dfs_1",                 # some label
+                decision.labels = c("low risk", "high risk"), # labels
+                quiet = FALSE  # enable/suppress user feedback
+)
+
+summary(co_1)
+plot(co_1, tree = 3, data = "train")
+
+
+# Evaluating ALL cue orders of dfs_2: ------  
+
+co_2 <- FFTrees(# formula = diagnosis ~ .,           # formula
+                # data = heart.train,                # training data
+                # data.test = heart.test,            # testing data
+                object = hd_1, 
+                tree.definitions = dfs_2, 
+                main = "FFT dfs_2",                 # some label
+                decision.labels = c("low risk", "high risk"), # labels
+                quiet = FALSE  # enable/suppress user feedback
+)
+
+summary(co_2)
+plot(co_2, tree = 24, data = "train", what = "all")
+```
+
+- Varying exit structures:
+
+```{r gfft-use-dfs-exits, eval = FALSE}
+
+# Evaluating ALL exit structures of dfs_3: ------  
+
+co_3 <- FFTrees(# formula = diagnosis ~ .,           # formula
+                # data = heart.train,                # training data
+                # data.test = heart.test,            # testing data
+                object = hd_1, 
+                tree.definitions = dfs_3, 
+                main = "FFT dfs_3",                 # some label
+                decision.labels = c("low risk", "high risk"), # labels
+                quiet = FALSE  # enable/suppress user feedback
+)
+
+summary(co_3)
+plot(co_3, tree = 3, data = "train", what = "all")
+
+
+# Evaluating ALL exit structures of dfs_4: ------  
+
+co_4 <- FFTrees(# formula = diagnosis ~ .,           # formula
+                # data = heart.train,                # training data
+                # data.test = heart.test,            # testing data
+                object = hd_1, 
+                tree.definitions = dfs_4, 
+                main = "FFT dfs_4",                 # some label
+                decision.labels = c("low risk", "high risk"), # labels
+                quiet = FALSE  # enable/suppress user feedback
+)
+
+summary(co_4)
+plot(co_4, tree = 5, data = "train", what = "all")
+```
+
+
+More simple FFT-editing / tree-manipulation functions:
+
+- ad 4. Change/mutate cues (by re-defining its cue, threshold, and exit direction)
+
+- ad 5. Delete/drop/remove node(s)
+
+- ad 6. Add node(s) (assumes ability to change/mutate cues in 4. above)
+
+
+### Using tree editing functions in pipes
+
+When working with FFTs, we can implement sequences of commands as pipes:
+
+```{r gfft-3, eval = FALSE}
+library(magrittr)  # for pipe
+
+# 1. Start from existing tree definitions (in an FFTrees object): ------ 
+
+# Start with an FFTrees object:
+x <- hd_1  # 7 FFTs (from above)
+ffts_df <- get_fft_definitions(x)  # x$trees$definitions / definitions (as df)
+fft_df  <- read_fft_df_v0(ffts_df, tree = 1)  # 1 FFT (as df, from above)
+
+plot(x, tree = 1)
+
+# Reorder cues of tree 1:
+fft_df_101 <- x %>%
+  get_fft_definitions() %>%
+  read_fft_df(tree = 1) %>%
+  reorder_nodes(order = c(1, 3, 2)) %>%
+  write_fft_df(tree = 101)
+fft_df_101
+
+# Use new tree definition:
+y <- FFTrees(object = x,  # NOTE: Using arguments of objects, when none are provided.
+             tree.definitions = fft_df_101, 
+             main = "HD: Reorder nodes") 
+
+plot(y, tree = 1, data = "train")
+
+
+# 2. Start from a verbal description: ------
+
+tit_0 <- FFTrees(formula = survived ~., 
+                 data = titanic, main = "Titanic 0")
+
+tit_0  # best training tree
+plot(tit_0)
+tit_0$trees$definitions
+tit_0$trees$stats
+
+# FFT from verbal description:  
+
+# Check for success of Birkenhead drill:
+
+tit_1 <- FFTrees(formula = survived ~., 
+                 data = titanic, 
+                 my.tree = "If sex = {female} predict True.
+                            If age = {child} predict True,
+                            otherwise predict False.",
+                 main = "Titanic 1")
+
+# Inspect result:
+tit_1  # best training tree
+plot(tit_1)
+tit_1$trees$definitions
+tit_1$trees$stats
+
+# Change tree: Reverse cue order:
+tit_fft_df_2 <- tit_1 %>%
+  get_fft_definitions() %>%
+  read_fft_df(tree = 1) %>%
+  reorder_nodes(order = c(2, 1)) %>%
+  write_fft_df(tree = 2)
+tit_fft_df_2
+
+# Use new tree definition:
+tit_2 <- FFTrees(object = tit_1, tree.definitions = tit_fft_df_2, main = "Titanic 2")
+
+plot(tit_2)  
+
+# Note: Modified tree has the same 2x2 classification matrix: Same accuracy measures, 
+#       but slightly worse frugality measures (as it needs to check 2 cues for adults)!
+
+```
+
+
+<!-- footer: -->
+
+----
+
+[File ``r file_name`` by [hn](https://neth.de/) last updated on `r Sys.Date()`]
+
+<!-- eof. -->
