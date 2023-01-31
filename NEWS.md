@@ -1,14 +1,15 @@
 
 # FFTrees 1.8
 
-## 1.8.0.9014
+## 1.8.0.9019
 
 This is the current development version of **FFTrees**, available at <https://github.com/ndphillips/FFTrees>. 
 
 **FFTrees** version 1.9.0 is to be released [on CRAN](https://CRAN.R-project.org/package=FFTrees) [in 2023-02]. 
 This version adds functionality (e.g., optimizing for new goals), 
 improves consistency and robustness (by increasing abstraction, e.g., using more global constants and object verification), 
-increases transparency (by providing more explicit user feedback), and fixes some bugs. 
+increases transparency (by providing more explicit user feedback), 
+and fixes some bugs. 
 
 <!-- Log of changes: --> 
 
@@ -18,10 +19,9 @@ Changes since last release:
 
 ### Major changes 
 
+- Enabled optimizing for a user-defined `my.goal` on cue and tree levels (as defined by `my.goal.fun`). 
+- Enabled optimizing for `dprime` on cue and tree levels (by using `"dprime"` as `goal.threshold`, `goal.chase`, or `goal` values). 
 - Increased vocabulary for interpreting verbal FFT descriptions (using `my.tree`).
-- Enabled user-defined `my.goal` on cue and tree levels (as defined by `my.goal.fun`). 
-- Enabled optimizing `dprime` on cue and tree levels (by using `"dprime"` as `goal.threshold`, `goal.chase`, or `goal` values). 
-- Added decision outcome and cue costs to `asif_results` (in `fftrees_grow_fan()`). 
 
 
 <!-- Minor: --> 
@@ -30,19 +30,21 @@ Changes since last release:
 
 - Included `dprime` values in cue level statistics (`x$cues$thresholds` and `x$cues$stats`). 
 - Included `dprime` values in competition statistics (`x$competition$train` and `x$competition$test`). 
-- Improved `summary()`: Include current goal and cost values (if `"cost"` used in goals).
+- Improved `summary.FFTrees()`: Include current goal and cost values (if `"cost"` occurs in goals).
 - Improved user feedback on combinations of goal and cost values.
 - Prepared for modular tree translation and editing functions (`util_gfft.R`). 
 - Prepared for global tree notation separator (`fft_node_sep`). 
+- Added decision outcome and cue costs to `asif_results` (in `fftrees_grow_fan()`). 
 
 <!-- Details: --> 
 
 ### Details 
 
-- Added verification functions (for checking integrity of objects or validity of inputs).
+- Added verification functions (for checking integrity of objects and validity of inputs).
+- Deprecated the `rounding` argument of `FFTrees()`. 
 - Re-arranged arguments of key functions (`FFTrees()` and `fftrees_create()`) by functionality. 
 - Re-arranged and cleaned code (in main and helper functions).
-- Re-defined local constants as global constants (in `util_gfft.R`). 
+- Re-defined local constants as global constants (in `util_const.R`). 
 - Revised status badges in `README`. 
 - Fixed bugs and revised vignettes. 
 
@@ -136,7 +138,7 @@ Changes since last release:
 
 - Plotting with `plot.FFTrees()`: 
     - Adjusted space for title to width of `main` argument.
-    - Deprecated `stats` argument. 
+    - Deprecated the `stats` argument. 
     - Moved utility functions to `helper_plot.R`. 
 
 <!-- Details: --> 
@@ -205,7 +207,7 @@ Changes since last release:
 
 - Changed tree statistics for test data from data frames to tibbles.
 - Improved feedback on missing decision labels when creating FFTs from descriptions with `my.tree` or `fftrees_wordstofftrees()`. 
-- Deprecated `store.data` argument of `FFTrees()`. 
+- Deprecated the `store.data` argument of `FFTrees()`. 
 
 <!-- Details: --> 
 
@@ -263,13 +265,13 @@ Changes since last release:
 
 ## 1.5.7
 
-- Officially deprecated "max" and "zigzag" algorithms. 
+- Officially deprecated the `"max"` and `"zigzag"` algorithms. 
 - Minor cleanup throughout. 
 
 ## 1.5.0
 
 - Fixed warnings for CRAN submission. 
-- FFTrees objects have a nicer internal structure.
+- `FFTrees` objects now have a nicer internal structure.
 - Added tests throughout (finally). 
 - Extensive code cleanup, which should speed things up.
 - New print method includes an ASCII confusion matrix. 
@@ -342,16 +344,16 @@ The algorithms are contained in the file `heuristic_algorithm.R` and can be impl
 
 ## 1.2.0
 
-- Changed wording of statistics throughout package. `hr` (_hit rate_) and `far` (_false alarm rate_) are now `sens` for _sensitivity_, and `spec` for _specificity_ ($1 - $false alarm rate). 
+- Changed wording of statistics throughout package: 
+`hr` (_hit rate_) and `far` (_false alarm rate_) (based on the classification frequency values\ `hi` and\ `fa`), are now `sens` for _sensitivity_ and `spec` for _specificity_ (1 $-$ `far`), respectively. 
 
 - The `rank.method` argument is now deprecated. Use `algorithm` instead.
 
-- Added `stats` argument to `plot.FFTrees()`. When `stats = FALSE`, only the tree will be plotted without reference to any statistical output.
+- Added a `stats` argument to `plot.FFTrees()`. When `stats = FALSE`, only the tree will be plotted without reference to any statistical output.
 
 - Grouped all competitive algorithm results (regression, cart, random forests, support vector machines) to the new `x.fft$comp` slot rather than a separate first level list for each algorithm. Also replaced separate algorithm wrappers with one general `comp_pred()` wrapper function.
 
-- Added `FFForest()`, a function for creating forests of FFTs, and `plot.FFForest()`, for visualizing forests of FFTs. 
-This function is very much still in development.
+- Added `FFForest()`, a function for creating forests of FFTs, and `plot.FFForest()`, for visualizing forests of FFTs. (This function is experimental and still in development.) 
 
 - Added random forests and support vector machines for comparison in `FFTrees()` using the **randomForest** and **e1071** packages.
 
@@ -359,8 +361,7 @@ This function is very much still in development.
 
 - `predict.FFTrees()` now returns a vector of predictions for a specific tree rather than creating an entirely new `FFTrees` object.
 
-- You can now plot cue accuracies within the `plot.FFTrees()` function by including the `plot.FFTrees(what = 'cues')` argument. 
-This replaces the former `showcues()` function.
+- You can now plot cue accuracies within the `plot.FFTrees()` function by including the `plot.FFTrees(what = 'cues')` argument. (This replaces the former `showcues()` function.) 
 
 - Many cosmetic changes to `plot.FFTrees()` (e.g.; gray levels, more distinct classification balls). 
 You can also control whether the results from competing algorithms are displayed or not with the `comp` argument.
@@ -408,6 +409,6 @@ Thus, the main tree building function is now `FFTrees()` and the new tree object
 
 ------ 
 
-[File `NEWS.md` last updated on 2023-01-26.]
+[File `NEWS.md` last updated on 2023-01-31.]
 
 <!-- eof. -->
