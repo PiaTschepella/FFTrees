@@ -25,17 +25,19 @@
 #' @param correction numeric. Correction added to all counts for calculating \code{dprime}.
 #' Default: \code{correction = .25}.
 #' @param sens.w numeric. Sensitivity weight (for computing weighted accuracy, \code{wacc}).
-#' Default: \code{sens.w = NULL} (to enforce that value is passed from calling function).
+#' Default: \code{sens.w = NULL} (to ensure that values are passed by calling function).
 #'
 #' @param my.goal Name of an optional, user-defined goal (as character string). Default: \code{my.goal = NULL}.
 #' @param my.goal.fun User-defined goal function (with 4 arguments \code{hi fa mi cr}). Default: \code{my.goal.fun = NULL}.
 #'
-#' @param cost.each numeric. An optional fixed cost added to all outputs (e.g., the cost of using the cue).
 #' @param cost.outcomes list. A list of length 4 named \code{"hi"}, \code{"fa"}, \code{"mi"}, \code{"cr"}, and
 #' specifying the costs of a hit, false alarm, miss, and correct rejection, respectively.
 #' E.g.; \code{cost.outcomes = listc("hi" = 0, "fa" = 10, "mi" = 20, "cr" = 0)} means that a
 #' false alarm and miss cost 10 and 20 units, respectively, while correct decisions incur no costs.
+#' Default: \code{cost.outcomes = NULL} (to ensure that values are passed by calling function).
 #'
+#' @param cost.each numeric. An optional fixed cost added to all outputs (e.g., the cost of using the cue).
+#' Default: \code{cost.each = NULL} (to ensure that values are passed by calling function).
 #'
 #' @return A data frame with variables of computed accuracy and cost measures (but dropping inputs).
 
@@ -47,8 +49,8 @@ add_stats <- function(data, # df with frequency counts of classification outcome
                       my.goal = NULL,
                       my.goal.fun = NULL,
                       #
-                      cost.each = NULL,
-                      cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0)
+                      cost.outcomes = NULL,  # (to ensure that values are passed by calling function), WAS: list(hi = 0, fa = 1, mi = 1, cr = 0)
+                      cost.each = NULL
 ) {
 
   # Prepare: ----
@@ -126,13 +128,21 @@ add_stats <- function(data, # df with frequency counts of classification outcome
 
   # Cost:
 
-  # a. Outcome cost (using NEGATIVE values, so that maximizing value will minimize costs):
-  data$cost_dec <- -1 * ((hi * cost.outcomes$hi) + (fa * cost.outcomes$fa)
-                         + (mi * cost.outcomes$mi) + (cr * cost.outcomes$cr)) / data$n  # Why data$n, not N?
+  if (!is.null(cost.outcomes)){
 
-  # b. Total cost:
-  data$cost <- data$cost_dec - cost.each  # Subtract constant cost.each (due to negative cost).
+    # a. Outcome cost (using NEGATIVE values, so that maximizing value will minimize costs):
+    data$cost_dec <- -1 * ((hi * cost.outcomes$hi) + (fa * cost.outcomes$fa)
+                           + (mi * cost.outcomes$mi) + (cr * cost.outcomes$cr)) / data$n  # Why data$n, not N?
 
+    # b. Total cost:
+    data$cost <- data$cost_dec - cost.each  # Subtract constant cost.each (due to negative cost).
+
+  } else { # no cost.outcomes:
+
+    data$cost_dec <- NA
+    data$cost     <- NA
+
+  }
 
 
   # Output: ----
@@ -194,14 +204,17 @@ add_stats <- function(data, # df with frequency counts of classification outcome
 #' @param correction numeric. Correction added to all counts for calculating \code{dprime}.
 #' Default: \code{correction = .25}.
 #' @param sens.w numeric. Sensitivity weight parameter (from 0 to 1, for computing \code{wacc}).
-#' Default: \code{sens.w = NULL} (to enforce that the current value is passed by the calling function).
+#' Default: \code{sens.w = NULL} (to ensure that values are passed by calling function).
 #'
 #' @param cost.outcomes list. A list of length 4 with names 'hi', 'fa', 'mi', and 'cr' specifying
 #' the costs of a hit, false alarm, miss, and correct rejection, respectively.
 #' For instance, \code{cost.outcomes = listc("hi" = 0, "fa" = 10, "mi" = 20, "cr" = 0)} means that
 #' a false alarm and miss cost 10 and 20, respectively, while correct decisions have no cost.
+#' Default: \code{cost.outcomes = NULL} (to ensure that values are passed by calling function).
+#'
 #' @param cost_v numeric. Additional cost value of each decision (as an optional vector of numeric values).
 #' Typically used to include the cue cost of each decision (as a constant for the current level of an FFT).
+#' Default: \code{cost_v = NULL} (to ensure that values are passed by calling function).
 #'
 #' @param my.goal Name of an optional, user-defined goal (as character string). Default: \code{my.goal = NULL}.
 #' @param my.goal.fun User-defined goal function (with 4 arguments \code{hi fa mi cr}). Default: \code{my.goal.fun = NULL}.
@@ -216,15 +229,15 @@ classtable <- function(prediction_v = NULL,
                        criterion_v  = NULL,
                        #
                        correction = .25,       # used for dprime calculation
-                       sens.w = NULL,          # sens.w (to allow passing by calling function)
+                       sens.w = NULL,          # sens.w (to ensure that values are passed by calling function)
                        #
-                       cost.outcomes = list(hi = 0, fa = 1, mi = 1, cr = 0),
+                       cost.outcomes = NULL,   # (to ensure that values are passed by calling function), WAS: list(hi = 0, fa = 1, mi = 1, cr = 0),
                        cost_v = NULL,          # cost value of each decision (at current level, as a constant)
                        #
                        my.goal = NULL,
                        my.goal.fun = NULL,
                        #
-                       na_prediction_action = "ignore"
+                       na_prediction_action = "ignore"  # is NOT used anywhere?
 ){
 
   #   prediction_v <- sample(c(TRUE, FALSE), size = 20, replace = TRUE)
@@ -250,25 +263,26 @@ classtable <- function(prediction_v = NULL,
     stop("prediction_v and criterion_v must be logical")
   }
 
-  # Remove NA and infinite values (from prediction AND criterion):
+  # Remove NA and infinite values (from prediction AND criterion vectors):
   prediction_v <- prediction_v[is.finite(criterion_v)]
   criterion_v  <- criterion_v[is.finite(criterion_v)]
 
-  # Remove NA prediction values:
 
-  # if(na_prediction_action == "ignore") {
+  # Remove NA prediction values: ----
+
+  # if(na_prediction_action == "ignore") { # is NOT used anywhere?
   #
   #   bad_index <- !is.finite(prediction_v)
   #
   #   prediction_v <- prediction_v[-bad_index]
   #   criterion_v <- criterion_v[-bad_index]
   #
-  #
   # }
 
   N <- min(length(criterion_v), length(prediction_v))
 
-  if (N > 0) { # use vectors: ----
+
+  if (N > 0) { # use 2 vectors: ----
 
     # Note 2 special cases:
 
@@ -276,13 +290,35 @@ classtable <- function(prediction_v = NULL,
     var_crit_v <- var(criterion_v)
 
     if (is.na(var_pred_v)){
-      message("Variance of prediction_v is NA. See print(prediction_v) =")
-      print(prediction_v)
+
+      # Provide user feedback:
+      prediction_v_s <- paste(prediction_v, collapse = ", ")
+
+      msg_1a <- "A prediction vector has no variance (NA):\n"
+      msg_2a <- paste0("prediction_v = ", prediction_v_s, ".\n")
+
+      cat(u_f_hig(msg_1a))
+      cat(u_f_hig(msg_2a))
+
+      # message("Variance of prediction_v is NA. See print(prediction_v) =")
+      # print(prediction_v)
+
     }
 
     if (is.na(var_crit_v)){
-      message("Variance of criterion_v is NA. See print(criterion_v) =")
-      print(criterion_v)
+
+      # Provide user feedback:
+      criterion_v_s <- paste(criterion_v, collapse = ", ")
+
+      msg_1b <- "A criterion vector has no variance (NA):\n"
+      msg_2b <- paste0("criterion_v = ", criterion_v_s, ".\n")
+
+      cat(u_f_hig(msg_1b))
+      cat(u_f_hig(msg_2b))
+
+      # message("Variance of criterion_v is NA. See print(criterion_v) =")
+      # print(criterion_v)
+
     }
 
 
@@ -356,10 +392,21 @@ classtable <- function(prediction_v = NULL,
       # Cost:
 
       # Costs (per classification outcome case):
-      # print(cost_v)  # 4debugging: Cost of each decision (cue cost at current level, as a constant)
-      cost_dec <- (as.numeric(c(hi, fa, mi, cr) %*% c(cost.outcomes$hi, cost.outcomes$fa, cost.outcomes$mi, cost.outcomes$cr))) / N
-      cost     <- (as.numeric(c(hi, fa, mi, cr) %*% c(cost.outcomes$hi, cost.outcomes$fa, cost.outcomes$mi, cost.outcomes$cr)) + sum(cost_v)) / N
 
+      # print(unlist(cost.outcomes))  # 4debugging
+      # print(cost_v)  # 4debugging: Cost of each decision (cue cost at current level, as a constant)
+
+      if (!is.null(cost.outcomes)){
+
+        cost_dec <- (as.numeric(c(hi, fa, mi, cr) %*% c(cost.outcomes$hi, cost.outcomes$fa, cost.outcomes$mi, cost.outcomes$cr))) / N
+        cost     <- (as.numeric(c(hi, fa, mi, cr) %*% c(cost.outcomes$hi, cost.outcomes$fa, cost.outcomes$mi, cost.outcomes$cr)) + sum(cost_v)) / N
+
+      } else { # no cost.outcomes:
+
+        cost_dec <- NA
+        cost     <- NA
+
+      }
 
 
     } else { # Case 2. Compute stats from freq combinations: ----
@@ -412,8 +459,21 @@ classtable <- function(prediction_v = NULL,
       # Cost:
 
       # Costs (per classification outcome case):
-      cost_dec <- (as.numeric(c(hi, fa, mi, cr) %*% c(cost.outcomes$hi, cost.outcomes$fa, cost.outcomes$mi, cost.outcomes$cr))) / N
-      cost <- (as.numeric(c(hi, fa, mi, cr) %*% c(cost.outcomes$hi, cost.outcomes$fa, cost.outcomes$mi, cost.outcomes$cr)) + sum(cost_v)) / N
+
+      # print(unlist(cost.outcomes))  # 4debugging
+      # print(cost_v)  # 4debugging: Cost of each decision (cue cost at current level, as a constant)
+
+      if (!is.null(cost.outcomes)){
+
+        cost_dec <- (as.numeric(c(hi, fa, mi, cr) %*% c(cost.outcomes$hi, cost.outcomes$fa, cost.outcomes$mi, cost.outcomes$cr))) / N
+        cost     <- (as.numeric(c(hi, fa, mi, cr) %*% c(cost.outcomes$hi, cost.outcomes$fa, cost.outcomes$mi, cost.outcomes$cr)) + sum(cost_v)) / N
+
+      } else { # no cost.outcomes:
+
+        cost_dec <- NA
+        cost     <- NA
+
+      }
 
 
     } # else if ((var(prediction_v) > 0) & (var(criterion_v) > 0)).
@@ -557,35 +617,35 @@ comp_pred <- function(formula,
   # SETUP: ----
   {
     if (is.null(data.test) & (is.null(data.train) == FALSE)) {
-      data.all <- data.train
-      train.cases <- 1:nrow(data.train)
-      test.cases <- c()
+      data_all <- data.train
+      train_cases <- 1:nrow(data.train)
+      test_cases <- c()
     }
 
     if (is.null(data.test) == FALSE & (is.null(data.train) == FALSE)) {
-      # data.all <- rbind(data.train, data.test)  # Note: fails when both dfs have different variables!
-      data.all <- dplyr::bind_rows(data.train, data.test)  # fills any non-matching columns with NAs.
-      train.cases <- 1:nrow(data.train)
-      test.cases <- (nrow(data.train) + 1):nrow(data.all)
+      # data_all <- rbind(data.train, data.test)  # Note: fails when both dfs have different variables!
+      data_all <- dplyr::bind_rows(data.train, data.test)  # fills any non-matching columns with NAs.
+      train_cases <- 1:nrow(data.train)
+      test_cases <- (nrow(data.train) + 1):nrow(data_all)
     }
 
     if (is.null(data.train) & is.null(data.test) == FALSE) {
-      data.all <- data.test
-      train.cases <- c()
-      test.cases <- 1:nrow(data.all)
+      data_all <- data.test
+      train_cases <- c()
+      test_cases <- 1:nrow(data_all)
     }
 
-    data.all <- model.frame(
+    data_all <- model.frame(
       formula = formula,
-      data = data.all
+      data = data_all
     )
 
-    train.crit <- data.all[train.cases, 1]
+    train_crit <- data_all[train_cases, 1]
 
     # Remove columns with no variance in training data:
     if (is.null(data.train) == FALSE) {
 
-      if (isTRUE(all.equal(length(unique(data.all[train.cases, 1])), 1))) {
+      if (isTRUE(all.equal(length(unique(data_all[train_cases, 1])), 1))) {
 
         do_test <- FALSE
 
@@ -605,17 +665,17 @@ comp_pred <- function(formula,
 
   if (do_test) {
 
-    if (is.null(train.cases) == FALSE) {
-      ok.cols <- sapply(1:ncol(data.all), FUN = function(x) {
-        length(unique(data.all[train.cases, x])) > 1
+    if (is.null(train_cases) == FALSE) {
+      ok_cols <- sapply(1:ncol(data_all), FUN = function(x) {
+        length(unique(data_all[train_cases, x])) > 1
       })
-      data.all <- data.all[, ok.cols]
+      data_all <- data_all[ , ok_cols]
     }
 
     # Convert character columns to factors:
-    for (col.i in 1:ncol(data.all)) {
-      if (inherits(data.all[,col.i], c("logical", "character", "factor"))) {
-        data.all[, col.i] <- factor(data.all[, col.i])
+    for (col_i in 1:ncol(data_all)) {
+      if (inherits(data_all[ , col_i], c("logical", "character", "factor"))) {
+        data_all[ , col_i] <- factor(data_all[ , col_i])
       }
     }
 
@@ -624,17 +684,17 @@ comp_pred <- function(formula,
 
   # Get data, cue, crit objects: ----
 
-  if (is.null(train.cases) == FALSE) {
+  if (is.null(train_cases) == FALSE) {
 
-    data.train <- data.all[train.cases,   ]
-    cue.train  <- data.all[train.cases, -1]
-    crit.train <- data.all[train.cases,  1]
+    data.train <- data_all[train_cases,   ]
+    # cue_train  <- data_all[train_cases, -1]  # is NOT used anywhere?
+    crit_train <- data_all[train_cases,  1]
 
   } else {
 
     data.train <- NULL
-    cue.train  <- NULL
-    crit.train <- NULL
+    # cue_train  <- NULL  # is NOT used anywhere?
+    crit_train <- NULL
 
   }
 
@@ -648,21 +708,21 @@ comp_pred <- function(formula,
     if (is.null(model)) {
 
       # Create new LR model:
-      train.mod <- suppressWarnings(glm(formula, data.train, family = "binomial"))
+      train_mod <- suppressWarnings(glm(formula, data.train, family = "binomial"))
 
     } else {
 
-      train.mod <- model
+      train_mod <- model
 
     }
 
     if (is.null(data.train) == FALSE) {
 
-      pred.train <- suppressWarnings(round(1 / (1 + exp(-predict(train.mod, data.train))), 0))
+      pred_train <- suppressWarnings(round(1 / (1 + exp(-predict(train_mod, data.train))), 0))
 
     } else {
 
-      pred.train <- NULL
+      pred_train <- NULL
 
     }
 
@@ -685,24 +745,24 @@ comp_pred <- function(formula,
     if (is.null(model)) {
 
       # Create new SVM model:
-      train.mod <- e1071::svm(formula,
+      train_mod <- e1071::svm(formula,
                               data = data.train, type = "C"
       )
 
     } else {
 
-      train.mod <- model
+      train_mod <- model
     }
 
     if (is.null(data.train) == FALSE) {
 
-      pred.train <- predict(train.mod,
+      pred_train <- predict(train_mod,
                             data = data.train
       )
 
     } else {
 
-      pred.train <- NULL
+      pred_train <- NULL
     }
 
   } # if (algorithm == "svm").
@@ -715,25 +775,25 @@ comp_pred <- function(formula,
     if (is.null(model)) {
 
       # Create new CART model:
-      train.mod <- rpart::rpart(formula,
+      train_mod <- rpart::rpart(formula,
                                 data = data.train,
                                 method = "class"
       )
 
     } else {
 
-      train.mod <- model
+      train_mod <- model
     }
 
     if (is.null(data.train) == FALSE) {
 
-      pred.train <- predict(train.mod,
+      pred_train <- predict(train_mod,
                             data.train,
                             type = "class"
       )
     } else {
 
-      pred.train <- NULL
+      pred_train <- NULL
     }
 
   } # if (algorithm == "cart").
@@ -746,29 +806,29 @@ comp_pred <- function(formula,
     if (is.null(model)) {
 
       # Create new RF model:
-      data.train[, 1] <- factor(data.train[, 1])
+      data.train[ , 1] <- factor(data.train[ , 1])
 
-      train.mod <- randomForest::randomForest(formula,
+      train_mod <- randomForest::randomForest(formula,
                                               data = data.train
       )
 
     } else {
 
-      train.mod <- model
+      train_mod <- model
 
     }
 
     if (is.null(data.train) == FALSE) {
 
       # Get training decisions:
-      pred.train <- predict(
-        train.mod,
+      pred_train <- predict(
+        train_mod,
         data.train
       )
 
     } else {
 
-      pred.train <- NULL
+      pred_train <- NULL
 
     }
 
@@ -778,71 +838,72 @@ comp_pred <- function(formula,
 
   # Get testing data: ------
 
-  pred.test <- NULL
+  pred_test <- NULL
 
   if (is.null(data.test) == FALSE) {
 
-    data.test <- data.all[test.cases, ]
-    cue.test  <- data.all[test.cases, -1]
-    crit.test <- data.all[test.cases, 1]
+    data.test <- data_all[test_cases, ]
+    cue_test  <- data_all[test_cases, -1]
+    crit_test <- data_all[test_cases, 1]
 
     # Check for new factor values:
     {
 
-      if (is.null(train.cases) == FALSE) {
-        factor.ls <- lapply(1:ncol(data.train), FUN = function(x) {
-          unique(data.train[, x])
+      if (is.null(train_cases) == FALSE) {
+        factor_ls <- lapply(1:ncol(data.train), FUN = function(x) {
+          unique(data.train[ , x])
         })
 
       } else {
 
-        factor.ls <- lapply(1:ncol(data.test), FUN = function(x) {
-          cue.x <- names(data.test)[x]
+        factor_ls <- lapply(1:ncol(data.test), FUN = function(x) {
+          cue_x <- names(data.test)[x]
 
-          if (cue.x %in% names(model$xlevels)) {
+          if (cue_x %in% names(model$xlevels)) {
 
-            return(model$xlevels[[cue.x]])
+            return(model$xlevels[[cue_x]])
 
           } else {
 
-            return(unique(data.test[, x]))
+            return(unique(data.test[ , x]))
+
           }
         })
       }
 
-      cannot.pred.mtx <- matrix(0, nrow = nrow(data.test), ncol = ncol(data.test))
+      cannot_pred_mtx <- matrix(0, nrow = nrow(data.test), ncol = ncol(data.test))
 
-      for (i in 1:ncol(cannot.pred.mtx)) {
+      for (i in 1:ncol(cannot_pred_mtx)) {
 
         if (inherits(data.test[, i], c("factor", "character"))) {
-          cannot.pred.mtx[, i] <- data.test[, i] %in% factor.ls[[i]] == FALSE
+          cannot_pred_mtx[ , i] <- data.test[ , i] %in% factor_ls[[i]] == FALSE
         }
 
       } # for().
 
-      cannot.pred.v <- rowSums(cannot.pred.mtx) > 0
+      cannot_pred_vec <- rowSums(cannot_pred_mtx) > 0
 
-      if (any(cannot.pred.v)) {
+      if (any(cannot_pred_vec)) {
 
         if (substr(new.factors, 1, 1) == "e") {
 
-          warning(paste(sum(cannot.pred.v), "cases in the test data could not be predicted by 'e' due to new factor values. These cases will be excluded"))
+          warning(paste(sum(cannot_pred_vec), "cases in the test data could not be predicted by 'e' due to new factor values. These cases will be excluded"))
 
-          data.test <- data.test[cannot.pred.v == FALSE, ]
-          cue.test <- cue.test[cannot.pred.v == FALSE, ]
-          crit.test <- crit.test[cannot.pred.v == FALSE]
+          data.test <- data.test[cannot_pred_vec == FALSE, ]
+          cue_test  <- cue_test[cannot_pred_vec == FALSE, ]
+          crit_test <- crit_test[cannot_pred_vec == FALSE]
         }
 
         if (substr(new.factors, 1, 1) == "b") {
 
-          warning(paste(sum(cannot.pred.v), "cases in the test data could not be predicted by 'b' due to new factor values. They will be predicted to be", mean(train.crit) > .5))
+          warning(paste(sum(cannot_pred_vec), "cases in the test data could not be predicted by 'b' due to new factor values. They will be predicted to be", mean(train_crit) > .5))
         }
 
       }
     }
 
 
-    # Get predictions (pred.test) from each model: ------
+    # Get predictions (pred_test) from each model: ------
 
     # 1. LR: ----
 
@@ -850,16 +911,16 @@ comp_pred <- function(formula,
 
       if (is.null(data.test) == FALSE) {
 
-        pred.test <- rep(0, nrow(data.test))
+        pred_test <- rep(0, nrow(data.test))
 
-        if (any(cannot.pred.v) & substr(new.factors, 1, 1) == "b") {
+        if (any(cannot_pred_vec) & substr(new.factors, 1, 1) == "b") {
 
-          pred.test[cannot.pred.v] <- mean(train.crit) > .5
-          pred.test[cannot.pred.v == FALSE] <- round(1 / (1 + exp(-predict(train.mod, data.test[cannot.pred.v == FALSE, ]))), 0)
+          pred_test[cannot_pred_vec] <- mean(train_crit) > .5
+          pred_test[cannot_pred_vec == FALSE] <- round(1 / (1 + exp(-predict(train_mod, data.test[cannot_pred_vec == FALSE, ]))), 0)
 
         } else {
 
-          pred.test[!cannot.pred.v] <- round(1 / (1 + exp(-predict(train.mod, data.test[cannot.pred.v == FALSE, ]))), 0)
+          pred_test[!cannot_pred_vec] <- round(1 / (1 + exp(-predict(train_mod, data.test[cannot_pred_vec == FALSE, ]))), 0)
         }
       }
 
@@ -883,17 +944,17 @@ comp_pred <- function(formula,
 
         # See if we can do any predictions
 
-        try.pred <- try(predict(train.mod, data.test), silent = TRUE)
+        try_pred <- try(predict(train_mod, data.test), silent = TRUE)
 
-        if (inherits(try.pred, "try-error")) {
+        if (inherits(try_pred, "try-error")) {
 
           warning("svm crashed predicting new data. That's all I can say")
 
-          pred.test <- NULL
+          pred_test <- NULL
 
         } else {
 
-          pred.test <- predict(train.mod, data.test)
+          pred_test <- predict(train_mod, data.test)
         }
       }
 
@@ -906,15 +967,15 @@ comp_pred <- function(formula,
 
       if (is.null(data.test) == FALSE) {
 
-        if (any(cannot.pred.v) & substr(new.factors, 1, 1) == "b") {
+        if (any(cannot_pred_vec) & substr(new.factors, 1, 1) == "b") {
 
-          pred.test <- rep(0, nrow(data.test))
-          pred.test[cannot.pred.v] <- mean(train.crit) > .5
-          pred.test[cannot.pred.v == FALSE] <- predict(train.mod, data.test[cannot.pred.v == FALSE, ], type = "class")
+          pred_test <- rep(0, nrow(data.test))
+          pred_test[cannot_pred_vec] <- mean(train_crit) > .5
+          pred_test[cannot_pred_vec == FALSE] <- predict(train_mod, data.test[cannot_pred_vec == FALSE, ], type = "class")
 
         } else {
 
-          pred.test <- predict(train.mod, data.test[cannot.pred.v == FALSE, ], type = "class")
+          pred_test <- predict(train_mod, data.test[cannot_pred_vec == FALSE, ], type = "class")
         }
       }
 
@@ -927,40 +988,41 @@ comp_pred <- function(formula,
 
       if (is.null(data.test) == FALSE) {
 
-        crit.test <- as.factor(crit.test)
+        crit_test <- as.factor(crit_test)
 
         # Get levels of training criterion
-        train.crit.levels <- levels(train.mod$y)
+        train_crit_levels <- levels(train_mod$y)
 
         # convert test crit to factor
-        crit.name <- paste(formula)[2]
+        crit_name <- paste(formula)[2]
 
-        data.test.2 <- data.test
-        data.test.2[crit.name] <- factor(data.test.2[[crit.name]], levels = train.crit.levels)
+        data_test_2 <- data.test
+        data_test_2[crit_name] <- factor(data_test_2[[crit_name]], levels = train_crit_levels)
 
 
         # See if we can do any predictions:
-        try.pred <- try(predict(train.mod, data.test.2), silent = TRUE)
+        try_pred <- try(predict(train_mod, data_test_2), silent = TRUE)
 
-        if (inherits(try.pred, "try-error")) {
-          warning("randomForest crashed predicting new data. That's all I can say")
+        if (inherits(try_pred, "try-error")) {
 
-          pred.test <- NULL
+          warning("randomForest crashed predicting new data. That's all I can say, unfortunately")
+
+          pred_test <- NULL
 
         } else {
 
-          pred.test <- predict(train.mod, data.test)
+          pred_test <- predict(train_mod, data.test)
         }
 
-        # if(any(cannot.pred.v) & substr(new.factors, 1, 1) == "b") {
+        # if(any(cannot_pred_vec) & substr(new.factors, 1, 1) == "b") {
         #
-        #   pred.test <- rep(0, nrow(data.test))
-        #   pred.test[cannot.pred.v] <- mean(train.crit) > .5
-        #   pred.test[cannot.pred.v == FALSE] <- predict(train.mod, data.test[cannot.pred.v == FALSE,])
+        #   pred_test <- rep(0, nrow(data.test))
+        #   pred_test[cannot_pred_vec] <- mean(train_crit) > .5
+        #   pred_test[cannot_pred_vec == FALSE] <- predict(train_mod, data.test[cannot_pred_vec == FALSE,])
         #
         # } else {
         #
-        #   pred.test <- predict(train.mod, data.test[cannot.pred.v == FALSE,])
+        #   pred_test <- predict(train_mod, data.test[cannot_pred_vec == FALSE,])
         #
         # }
       }
@@ -972,90 +1034,94 @@ comp_pred <- function(formula,
 
   # Convert predictions to logical if necessary: ----
 
-  if (is.null(pred.train) == FALSE) {
+  if (is.null(pred_train) == FALSE) {
 
-    if ("TRUE" %in% paste(pred.train)) {
-      pred.train <- as.logical(paste(pred.train))
+    if ("TRUE" %in% paste(pred_train)) {
+      pred_train <- as.logical(paste(pred_train))
     }
 
-    if ("1" %in% paste(pred.train)) {
-      pred.train <- as.logical(as.numeric(paste(pred.train)))
+    if ("1" %in% paste(pred_train)) {
+      pred_train <- as.logical(as.numeric(paste(pred_train)))
     }
 
 
     # Calculate training accuracy stats: ----
 
-    acc.train <- classtable(
-      prediction_v = as.logical(pred.train),
-      criterion_v = as.logical(crit.train),
+    acc_train <- classtable(
+      prediction_v = as.logical(pred_train),
+      criterion_v = as.logical(crit_train),
       sens.w = sens.w
     )
   }
 
-  if (is.null(pred.train)) {
+  if (is.null(pred_train)) {
 
-    acc.train <- classtable(
+    acc_train <- classtable(
       prediction_v = c(TRUE, TRUE, FALSE),
       criterion_v =  c(FALSE, FALSE, TRUE),
       sens.w = sens.w
     )
 
-    acc.train[1, ] <- NA
+    acc_train[1, ] <- NA
 
   }
 
-  if (is.null(pred.test) == FALSE) {
+  if (is.null(pred_test) == FALSE) {
 
-    if ("TRUE" %in% paste(pred.test)) {
-      pred.test <- as.logical(paste(pred.test))
+    if ("TRUE" %in% paste(pred_test)) {
+      pred_test <- as.logical(paste(pred_test))
     }
 
-    if ("1" %in% paste(pred.test)) {
-      pred.test <- as.logical(as.numeric(paste(pred.test)))
+    if ("1" %in% paste(pred_test)) {
+      pred_test <- as.logical(as.numeric(paste(pred_test)))
     }
 
-    acc.test <- classtable(
-      prediction_v = as.logical(pred.test),
-      criterion_v = as.logical(crit.test),
+    acc_test <- classtable(
+      prediction_v = as.logical(pred_test),
+      criterion_v = as.logical(crit_test),
       sens.w = sens.w
     )
 
   } else {
 
-    acc.test <- classtable(
+    acc_test <- classtable(
       prediction_v = c(TRUE, FALSE, TRUE),
       criterion_v = c(TRUE, TRUE, FALSE),
       sens.w = sens.w
     )
 
-    acc.test[1, ] <- NA
+    acc_test[1, ] <- NA
 
   }
 
 
   if (do_test == FALSE) {
 
-    acc.train <- classtable(
+    acc_train <- classtable(
       prediction_v = c(TRUE, FALSE, TRUE),
       criterion_v = c(FALSE, TRUE, TRUE),
       sens.w = sens.w
     )
-    acc.train[1, ] <- NA
 
-    acc.test <- classtable(
+    acc_train[1, ] <- NA
+
+    acc_test <- classtable(
       prediction_v = c(TRUE, FALSE, TRUE),
       criterion_v = c(FALSE, TRUE, TRUE),
       sens.w = sens.w
     )
-    acc.test[1, ] <- NA
+
+    acc_test[1, ] <- NA
+
   }
 
 
-  # ORGANIZE output: ----
+  # OUTPUT: ------
 
+  # Organize output:
   output <- list(
-    "accuracy" = list(train = acc.train, test = acc.test),
-    "model" = train.mod,
+    "accuracy" = list(train = acc_train, test = acc_test),
+    "model" = train_mod,
     "algorithm" = algorithm
   )
 
@@ -1065,10 +1131,9 @@ comp_pred <- function(formula,
 
 
 
-
 # ToDo: ------
 
-# Reduce redundancies:
+# Reduce redundancy:
 # - Avoid repeated computation of stats in add_stats() and classtable().
 # - Consider re-using stats from add_stats() or classtable()
 #   when printing (by console_confusionmatrix()) or plotting (by plot.FFTrees()) FFTs.
